@@ -1,0 +1,23 @@
+[toolchain]
+package_manager = "yarn"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+solana_predict = "F4JxF7aePgrKKwmVM9tXHUadeTKNLXwFMZFQoiBowLcr"
+
+[programs.devnet]
+solana_predict = "F4JxF7aePgrKKwmVM9tXHUadeTKNLXwFMZFQoiBowLcr"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "devnet"
+wallet = "./id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
+

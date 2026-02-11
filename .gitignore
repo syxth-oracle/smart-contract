@@ -1,0 +1,32 @@
+.anchor
+node_modules
+target
+
+# Anchor
+.anchor
+
+# Node
+node_modules
+
+# Rust
+target
+
+# Solana
+.solana
+
+# Anchor
+.anchor
+
+# Node
+node_modules
+
+# Rust
+target
+
+# Solana
+.solana 
+
+# Keypair files
+id.json
+solflare.json
+new-program-keypair.json
