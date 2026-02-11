@@ -11,7 +11,7 @@ pub struct CancelBet<'info> {
         seeds = [b"market", market.market_id.to_le_bytes().as_ref()],
         bump = market.bump,
     )]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
 
     #[account(
         mut,
@@ -55,11 +55,18 @@ pub struct CancelBet<'info> {
     #[account(mut)]
     pub user_share_account: AccountInfo<'info>,
     
+    #[account(
+        seeds = [b"platform_config"],
+        bump = platform_config.bump,
+    )]
     pub platform_config: Account<'info, PlatformConfig>,
 
-    /// CHECK: Validated against platform_config
-    #[account(mut, constraint = treasury.key() == platform_config.treasury)]
-    pub treasury: AccountInfo<'info>,
+    #[account(
+        mut,
+        constraint = treasury.key() == platform_config.treasury,
+        constraint = treasury.mint == collateral_mint.key() @ PredictError::InvalidMint,
+    )]
+    pub treasury: Account<'info, TokenAccount>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -121,8 +128,8 @@ pub fn process_cancel_bet(
 
     require!(raw_refund > 0, PredictError::MathOverflow);
 
-    // Exit fee: use market.fee_bps (basis points) for consistency with place_bet
-    let fee = (raw_refund as u128 * market.fee_bps as u128 / 10000) as u64;
+    // Exit fee: use market.fee_bps (round up to prevent micro-transaction fee bypass)
+    let fee = ((raw_refund as u128 * market.fee_bps as u128 + 9999) / 10000) as u64;
     let refund = raw_refund.checked_sub(fee).ok_or(PredictError::MathOverflow)?;
 
     // Burn Shares

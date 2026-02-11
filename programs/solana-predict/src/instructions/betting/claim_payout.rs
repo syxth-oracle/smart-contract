@@ -73,6 +73,7 @@ pub fn process_claim_payout(
     // Guards
     require!(market.status == MarketStatus::Resolved, PredictError::MarketNotResolved);
     let outcome = market.resolved_outcome.clone().ok_or(PredictError::MarketNotResolved)?;
+    require!(ctx.accounts.user_position.total_claimed == 0, PredictError::AlreadyClaimed);
 
     // Read user balance
     let user_share_acc = TokenAccount::try_deserialize(&mut &ctx.accounts.user_share_account.data.borrow()[..])?;
@@ -180,7 +181,9 @@ pub fn process_claim_payout(
     // In CPMM, these track AMM pool reserves, not token supply.
     // The burn above reduces mint supply, which is used as the payout denominator.
     
-    ctx.accounts.user_position.total_claimed += payout;
+    ctx.accounts.user_position.total_claimed = ctx.accounts.user_position.total_claimed
+        .checked_add(payout)
+        .ok_or(PredictError::MathOverflow)?;
 
     emit!(PayoutClaimed {
         market_id,

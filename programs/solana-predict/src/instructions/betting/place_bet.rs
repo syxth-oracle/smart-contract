@@ -12,7 +12,7 @@ pub struct PlaceBet<'info> {
         seeds = [b"market", market_id.to_le_bytes().as_ref()],
         bump = market.bump,
     )]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
 
     #[account(
         mut,
@@ -68,15 +68,19 @@ pub struct PlaceBet<'info> {
     #[account(mut)]
     pub user_share_account: AccountInfo<'info>,
 
-    #[account(mut)]
-    pub platform_config: Account<'info, PlatformConfig>,
-
-    /// CHECK: Treasury address validated against platform_config constraint
     #[account(
         mut,
-        constraint = treasury.key() == platform_config.treasury
+        seeds = [b"platform_config"],
+        bump = platform_config.bump,
     )]
-    pub treasury: AccountInfo<'info>, // For fee
+    pub platform_config: Account<'info, PlatformConfig>,
+
+    #[account(
+        mut,
+        constraint = treasury.key() == platform_config.treasury,
+        constraint = treasury.mint == collateral_mint.key() @ PredictError::InvalidMint,
+    )]
+    pub treasury: Account<'info, TokenAccount>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -109,9 +113,16 @@ pub fn process_place_bet(
     }
     require!(outcome == Outcome::Yes || outcome == Outcome::No, PredictError::InvalidOutcome);
 
-    // 2. Fee Calculation
-    let fee = (amount as u128 * market.fee_bps as u128 / 10000) as u64;
-    let net_amount = amount - fee;
+    // Validate user share account before any transfers
+    let user_share_data = TokenAccount::try_deserialize(&mut &ctx.accounts.user_share_account.data.borrow()[..])?;
+    let target_mint = if outcome == Outcome::Yes { market.yes_mint } else { market.no_mint };
+    require!(user_share_data.mint == target_mint, PredictError::InvalidMint);
+    require!(user_share_data.owner == ctx.accounts.user.key(), PredictError::Unauthorized);
+
+    // 2. Fee Calculation (round up to prevent micro-bet fee bypass)
+    let fee = ((amount as u128 * market.fee_bps as u128 + 9999) / 10000) as u64;
+    let net_amount = amount.checked_sub(fee).ok_or(PredictError::MathOverflow)?;
+    require!(net_amount > 0, PredictError::BelowMinBet);
 
     // 3. Transfer USDC
     // User -> Vault (net)
@@ -185,12 +196,6 @@ pub fn process_place_bet(
     } else {
         ctx.accounts.no_mint.to_account_info()
     };
-    
-    // Verify user share account matches the target mint
-    let user_share_data = TokenAccount::try_deserialize(&mut &ctx.accounts.user_share_account.data.borrow()[..])?;
-    let target_mint = if outcome == Outcome::Yes { market.yes_mint } else { market.no_mint };
-    require!(user_share_data.mint == target_mint, PredictError::InvalidMint);
-    require!(user_share_data.owner == ctx.accounts.user.key(), PredictError::Unauthorized);
 
     token::mint_to(
         CpiContext::new_with_signer(
@@ -206,7 +211,9 @@ pub fn process_place_bet(
     )?;
 
     // 5. Update State (CPMM pool reserves)
-    market.total_collateral += net_amount;
+    market.total_collateral = market.total_collateral
+        .checked_add(net_amount)
+        .ok_or(PredictError::MathOverflow)?;
     if outcome == Outcome::Yes {
         // User takes YES shares from pool, collateral adds to NO side
         market.total_yes_shares = market.total_yes_shares.checked_sub(shares).ok_or(PredictError::MathOverflow)?;
@@ -222,11 +229,17 @@ pub fn process_place_bet(
     position.user = ctx.accounts.user.key();
     position.market = market.key();
     if outcome == Outcome::Yes {
-        position.yes_shares += shares;
+        position.yes_shares = position.yes_shares
+            .checked_add(shares)
+            .ok_or(PredictError::MathOverflow)?;
     } else {
-        position.no_shares += shares;
+        position.no_shares = position.no_shares
+            .checked_add(shares)
+            .ok_or(PredictError::MathOverflow)?;
     }
-    position.total_deposited += net_amount;
+    position.total_deposited = position.total_deposited
+        .checked_add(net_amount)
+        .ok_or(PredictError::MathOverflow)?;
     position.last_bet_timestamp = clock.unix_timestamp;
     position.bump = ctx.bumps.user_position;
 

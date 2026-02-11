@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::TokenAccount;
 use crate::state::PlatformConfig;
 use crate::errors::PredictError;
 
@@ -12,8 +13,10 @@ pub struct UpdateTreasury<'info> {
     )]
     pub platform_config: Account<'info, PlatformConfig>,
     pub admin: Signer<'info>,
-    /// CHECK: New treasury address (should be a wSOL ATA)
-    pub new_treasury: AccountInfo<'info>,
+    #[account(
+        constraint = new_treasury.mint == platform_config.collateral_mint @ PredictError::InvalidMint,
+    )]
+    pub new_treasury: Account<'info, TokenAccount>,
 }
 
 pub fn update_treasury(ctx: Context<UpdateTreasury>) -> Result<()> {

@@ -267,7 +267,8 @@ describe("CPMM Migration Tests", () => {
 
     const BET_AMOUNT = Math.floor(0.5 * LAMPORTS_PER_SOL); // 0.5 SOL
     const FEE_BPS = 250;
-    const fee = Math.floor(BET_AMOUNT * FEE_BPS / 10000);
+    // Ceiling division to match contract: (amount * fee_bps + 9999) / 10000
+    const fee = Math.floor((BET_AMOUNT * FEE_BPS + 9999) / 10000);
     const netAmount = BET_AMOUNT - fee;
 
     // Expected shares via CPMM
@@ -345,7 +346,8 @@ describe("CPMM Migration Tests", () => {
     const { yesPrice: priceBefore } = cpmmPrice(yesPoolBefore, noPoolBefore);
 
     const BET_AMOUNT = Math.floor(0.3 * LAMPORTS_PER_SOL);
-    const fee = Math.floor(BET_AMOUNT * 250 / 10000);
+    // Ceiling division to match contract
+    const fee = Math.floor((BET_AMOUNT * 250 + 9999) / 10000);
     const netAmount = BET_AMOUNT - fee;
     const expectedShares = expectedSharesNo(yesPoolBefore, noPoolBefore, netAmount);
 
@@ -413,7 +415,8 @@ describe("CPMM Migration Tests", () => {
     const newYesPool = yesPoolBefore + sharesToBurn;
     const newNoPool = Math.floor(kBefore / newYesPool);
     const rawRefund = noPoolBefore - newNoPool;
-    const exitFee = Math.floor(rawRefund / 100); // 1% exit fee
+    // Ceiling division to match contract: (rawRefund * fee_bps + 9999) / 10000
+    const exitFee = Math.floor((rawRefund * 250 + 9999) / 10000); // 2.5% exit fee, ceiling
     const expectedRefund = rawRefund - exitFee;
 
     const userAta = await token.getAssociatedTokenAddress(WSOL_MINT, userA.publicKey);

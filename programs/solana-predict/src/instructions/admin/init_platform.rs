@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::{Mint, TokenAccount};
 use crate::state::PlatformConfig;
 use crate::events::PlatformInitialized;
 use crate::errors::PredictError;
@@ -18,10 +19,11 @@ pub struct InitPlatform<'info> {
     pub admin: Signer<'info>,
     
     pub system_program: Program<'info, System>,
-    /// CHECK: This is the collateral mint (wSOL) address used for betting. We trust the deployer to provide the correct one.
-    pub collateral_mint: AccountInfo<'info>,
-    /// CHECK: This is the treasury wallet address
-    pub treasury: AccountInfo<'info>,
+    pub collateral_mint: Account<'info, Mint>,
+    #[account(
+        constraint = treasury.mint == collateral_mint.key() @ PredictError::InvalidMint,
+    )]
+    pub treasury: Account<'info, TokenAccount>,
 }
 
 pub fn process_init_platform(
