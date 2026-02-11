@@ -74,4 +74,8 @@ pub mod solana_predict {
     pub fn update_collateral_mint(ctx: Context<UpdateCollateralMint>) -> Result<()> {
         instructions::admin::update_collateral_mint::update_collateral_mint(ctx)
     }
+
+    pub fn update_treasury(ctx: Context<UpdateTreasury>) -> Result<()> {
+        instructions::admin::update_treasury::update_treasury(ctx)
+    }
 }
